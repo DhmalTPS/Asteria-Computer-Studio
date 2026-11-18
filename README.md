@@ -1,5 +1,7 @@
 # Asteria Computer Studio
 
+[![CI](https://github.com/DhmalTPS/Asteria-Computer-Studio/actions/workflows/ci.yml/badge.svg)](https://github.com/DhmalTPS/Asteria-Computer-Studio/actions/workflows/ci.yml)
+
 A complete computer, designed and built in software: an original 32-bit instruction set (**ASTERIA-32**),
 three processor microarchitectures that run it (single-cycle, multi-cycle, 5-stage pipeline), a
 cycle-aware memory system (caches, MMU/TLB, DRAM controller with real timing), interrupt-driven devices
@@ -19,14 +21,15 @@ Start at [docs/README.md](docs/README.md).
 Kept current as the project grows (policy D25).
 - Only milestone M0 exists so far: build system, architecture checks, core utilities. **No part of the machine
   runs yet.** Everything described above is specified in `docs/` and scheduled in the roadmap.
-- Windows/MSVC only for now. The code avoids platform-specific APIs outside the GUI, but no other compiler has
-  been tested.
-- The CI workflow is written but has not run yet, because the repository has no remote.
+- Windows/MSVC only for now, locally and in CI. The code avoids platform-specific APIs outside the GUI, but no
+  other compiler has been tested.
 
 ## Build (Windows)
 Requirements: Visual Studio Build Tools with MSVC 14.5x, CMake ≥ 3.28, Ninja, and vcpkg with
 `VCPKG_ROOT` set.
 ```powershell
+git clone https://github.com/DhmalTPS/Asteria-Computer-Studio.git
+cd Asteria-Computer-Studio
 . .\scripts\dev-shell.ps1        # once per terminal: loads the MSVC environment
 cmake --preset debug             # configure (first run builds the test library via vcpkg)
 cmake --build --preset debug     # build
