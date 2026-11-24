@@ -8,8 +8,8 @@ cycle-aware memory system (caches, MMU/TLB, DRAM controller with real timing), i
 with DMA, a self-written toolchain (assembler, linker, C compiler, debugger), and **AsteriaOS**, which runs
 on the virtual machine. All of it lives in one Windows desktop application where you can see every cycle.
 
-> Status: **M0 complete** (build system, architecture checks, core utilities, CI). Next: M1, the
-> ISA core. See [docs/ROADMAP.md](docs/ROADMAP.md).
+> Status: **M1 in progress.** The instruction set exists as code: instruction table, encoder, decoder and
+> disassembler (`asteria disasm`). Next: the reference interpreter. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 No existing emulator, assembler, cache or memory simulator is used. Third-party code is limited to
 the GUI (Dear ImGui, ImPlot) and the test framework (Catch2).
@@ -19,8 +19,9 @@ Start at [docs/README.md](docs/README.md).
 
 ## Honest limitations
 Kept current as the project grows (policy D25).
-- Only milestone M0 exists so far: build system, architecture checks, core utilities. **No part of the machine
-  runs yet.** Everything described above is specified in `docs/` and scheduled in the roadmap.
+- Only M0 and the first part of M1 exist so far: build system, core utilities, and the instruction set as data
+  (encode, decode, disassemble). **No part of the machine runs yet.** Everything else described above is
+  specified in `docs/` and scheduled in the roadmap.
 - Windows/MSVC only for now, locally and in CI. The code avoids platform-specific APIs outside the GUI, but no
   other compiler has been tested.
 
@@ -34,5 +35,5 @@ cd Asteria-Computer-Studio
 cmake --preset debug             # configure (first run builds the test library via vcpkg)
 cmake --build --preset debug     # build
 ctest --preset debug             # run all tests, including the architecture layering check
-.\build\debug\apps\asteria\asteria.exe help
+.\build\debug\apps\asteria\asteria.exe disasm 000A0044   # -> ADDI R1, R0, 10
 ```

@@ -52,3 +52,6 @@ The third row matters: a page fault is the machine working correctly, so it neve
 - Use `static_assert` for constexpr facts, and exhaustive loops for small domains (all 256 bytes,
   every bit range).
 - Test names are sentences: `TEST_CASE("sign_extend widens two's-complement fields")`.
+- Test names are **ASCII only** (write "spec section 4", not "§4"). CTest passes each name back to the test
+  binary as a filter, and on Windows a non-ASCII character is re-encoded on the way, so the test is
+  silently not found and reported as failed.

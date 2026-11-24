@@ -13,6 +13,8 @@ $vs = & $vswhere -latest -products * `
 if (-not $vs) { throw "No Visual Studio installation with the MSVC x64 toolset was found" }
 
 $vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
+# vcvars64.bat itself calls vswhere by name, so its folder must be on PATH for that call.
+$env:Path = "$(Split-Path $vswhere);$env:Path"
 cmd /c "`"$vcvars`" >nul && set" | ForEach-Object {
     if ($_ -match '^([^=]+)=(.*)$') { Set-Item -Path "env:$($Matches[1])" -Value $Matches[2] }
 }

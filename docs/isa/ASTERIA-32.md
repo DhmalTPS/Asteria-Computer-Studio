@@ -260,7 +260,7 @@ walker resolves it (D6).
 | 6–7 | Reserved |
 
 ### 5.4 Trap target
-`TVEC[1:0]` selects the mode. `TVEC[31:2] << 2` is the base.
+`TVEC[0]` selects the mode (`TVEC[1]` always reads as 0). `TVEC[31:2] << 2` is the base.
 - Mode 0 (direct): every trap jumps to base.
 - Mode 1 (vectored): exceptions jump to base. IRQ *i* jumps to base + 4 × (1 + i).
 
@@ -279,7 +279,7 @@ walker resolves it (D6).
 | `0x001` | `CAUSE` | K rw | 0 | [31] interrupt · [15:8] subcode · [7:0] code/IRQ |
 | `0x002` | `EPC` | K rw | 0 | Trap PC. Bits [1:0] read as 0 |
 | `0x003` | `BADVADDR` | K rw | 0 | Faulting address |
-| `0x004` | `TVEC` | K rw | 0 | [31:2] base · [1:0] mode |
+| `0x004` | `TVEC` | K rw | 0 | [31:2] base · [0] mode · [1] reads as 0 |
 | `0x005` | `SCRATCH` | K rw | 0 | Free for the kernel (holds the kernel stack pointer on trap entry) |
 | `0x006` | `PTBR` | K rw | 0 | [31:12] root table PPN · [11:4] ASID · [0] EN (paging on) |
 | `0x007` | `IMASK` | K rw | 0 | [7:0] per-IRQ enable |
@@ -289,6 +289,12 @@ walker resolves it (D6).
 | `0x012` | `INSTRET` | ro | 0 | Low 32 bits of instructions retired |
 | `0x013` | `INSTRETH` | ro | 0 | High 32 bits |
 | `0x0F0` | `CPUID` | ro | `0x0001_0000` | [31:16] ISA major · [15:0] ISA minor |
+
+**Undefined bits.** A bit the table does not define reads as 0, and writes to it are ignored. A write to a
+defined field stores exactly what was written (for example, CAUSE keeps bits [31], [15:8] and [7:0]).
+
+**Counters.** `INSTRET` counts instructions that completed (an instruction that traps does not count).
+A CSR instruction that reads `INSTRET` sees the count *before* itself.
 
 `CYCLE` is the **only** architecturally visible value that may legitimately differ between the
 three CPUs. The differential tester treats reads of it as non-comparable (§10).

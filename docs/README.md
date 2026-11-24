@@ -13,7 +13,7 @@ The docs are the **source of truth**. Code implements them. When a design change
 7. [references/README.md](references/README.md): reviews of five external projects, what Asteria
    adopts from them, and what it avoids.
 8. `study/`: one note per finished milestone, a design walkthrough plus an interview quiz.
-   Start with [study/M00-foundation.md](study/M00-foundation.md).
+   Start with [study/M00-foundation.md](study/M00-foundation.md), then [study/M01-isa-core.md](study/M01-isa-core.md).
 
 ## Planned
 - `formats/AXF.md`: object/executable container (M1 subset, full in M9)
