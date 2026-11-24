@@ -2,3 +2,6 @@
 # Modules are added here as their milestone begins (docs/ROADMAP.md).
 add_subdirectory(common)
 add_subdirectory(isa)
+add_subdirectory(sim)
+add_subdirectory(cpu)
+add_subdirectory(mem)

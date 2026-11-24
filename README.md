@@ -8,8 +8,9 @@ cycle-aware memory system (caches, MMU/TLB, DRAM controller with real timing), i
 with DMA, a self-written toolchain (assembler, linker, C compiler, debugger), and **AsteriaOS**, which runs
 on the virtual machine. All of it lives in one Windows desktop application where you can see every cycle.
 
-> Status: **M1 in progress.** The instruction set exists as code: instruction table, encoder, decoder and
-> disassembler (`asteria disasm`). Next: the reference interpreter. See [docs/ROADMAP.md](docs/ROADMAP.md).
+> Status: **M1 in progress.** The instruction set exists as code (instruction table, encoder, decoder,
+> disassembler), and the reference interpreter executes it: every instruction, CSRs, traps, interrupts,
+> privilege and paging. Next: the assembler. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 No existing emulator, assembler, cache or memory simulator is used. Third-party code is limited to
 the GUI (Dear ImGui, ImPlot) and the test framework (Catch2).
@@ -19,9 +20,10 @@ Start at [docs/README.md](docs/README.md).
 
 ## Honest limitations
 Kept current as the project grows (policy D25).
-- Only M0 and the first part of M1 exist so far: build system, core utilities, and the instruction set as data
-  (encode, decode, disassemble). **No part of the machine runs yet.** Everything else described above is
-  specified in `docs/` and scheduled in the roadmap.
+- Only M0 and the first half of M1 exist so far: build system, core utilities, the instruction set as data,
+  and the reference interpreter. The interpreter runs only inside unit tests until the assembler and the
+  `asteria run` command arrive (M1 part 3). Everything else described above is specified in `docs/` and
+  scheduled in the roadmap.
 - Windows/MSVC only for now, locally and in CI. The code avoids platform-specific APIs outside the GUI, but no
   other compiler has been tested.
 

@@ -185,13 +185,19 @@ Unless stated otherwise, the `rd`, `rs1` and `rs2` fields must be zero.
 |---|---|---|
 | `ECALL` | any | Raise `EnvironmentCall`. EPC = PC (the handler must add 4 before `ERET`) |
 | `EBREAK` | any | Raise `Breakpoint`. An attached debugger intercepts it first |
-| `ERET` | K | IE ← PIE; KM ← PKM; PC ← EPC |
-| `WFI` | K | Stall until `(IPEND & IMASK) ≠ 0`, regardless of IE, then continue at PC + 4 |
-| `HALT` | K | Stop the machine. Exit code = `R4` (`a0`). Tests pass with `a0 = 0` |
+| `ERET` | K | IE ← PIE; KM ← PKM; PC ← EPC. PIE and PKM keep their values |
+| `WFI` | K | Stall until `(IPEND & IMASK) ≠ 0`, regardless of IE, then continue at PC + 4 (see below) |
+| `HALT` | K | Stop the machine. Exit code = `R4` (`a0`). Tests pass with `a0 = 0`. `PC` stays at the `HALT`, which counts as completed (`INSTRET`) |
 | `TLBFLUSH rs1, rs2` | K | Invalidate cached translations (§8.6). `rs1`/`rs2` are used |
 | `FENCE.I` | any | Make all earlier stores visible to instruction fetch (§9) |
 
 Executing a K instruction in User mode raises `PrivilegeViolation`.
+
+**WFI and interrupts.** If a line is already pending and enabled with `IE = 1` when the CPU reaches a `WFI`,
+the interrupt is taken first, at that boundary (EPC = the `WFI`). Otherwise the `WFI` stalls and has not
+completed. When a line becomes pending and enabled, the `WFI` **completes** (PC + 4, counted in `INSTRET`),
+and an enabled interrupt is taken at the next boundary, so its EPC points *after* the `WFI`. The handler's
+`ERET` therefore never lands back in the wait.
 
 ### 4.8 CSR access (I-type, `imm[15:0]` = CSR number; `imm[15:12]` must be 0)
 | Instr | Operation (t = old CSR value) |
@@ -331,10 +337,17 @@ VA = VPN1[31:22] | VPN0[21:12] | offset[11:0]
        a ← pte.PPN << 12 ; level ← 0 ; goto 2
 5. leaf: if level = 1 and pte.PPN[9:0] ≠ 0 → PageFault(subcode 2)   (misaligned superpage)
 6. permission check (§8.5) → PageFault(subcode 1) on failure
-7. if pte.A = 0, or (store and pte.D = 0): set A (and D for a store) and write the PTE back
+7. if pte.A = 0, or (store and pte.D = 0): set A (and D for a store) and write the PTE back (see below)
 8. PA = level 1 → PPN[19:10] : VPN0 : offset       (4 MiB superpage)
         level 0 → PPN : offset                      (4 KiB page)
 ```
+- Page tables must be in ROM or RAM. A table address anywhere else is a bus error at step 2.
+- **Write-back is the last check (precise, D2).** The PTE is written back only once the access itself is known
+  to succeed (it passed the bus check for its physical address). If the PTE cannot be written (a table in ROM),
+  the access raises its own type's BusError (`InstrBusError` / `LoadBusError` / `StoreBusError`,
+  `BADVADDR` = the virtual address). A faulting access never sets A or D.
+- `SWAP` counts as a store: it needs R and W and sets A and D (§4.4a).
+- Bus errors in this section report the **virtual** address in `BADVADDR`, like every address exception.
 
 ### 8.5 Permission check
 | Access | Requires |

@@ -18,6 +18,17 @@ Rules:
 - Cacheability is a property of the **physical** range, never of a PTE. A wrong mapping therefore can't
   cache a device register.
 - MMIO registers are 32-bit and must be accessed with `LW`/`SW`. Other sizes raise a BusError.
+- Page tables must live in ROM or RAM. `SWAP` is RAM-only (it writes).
+- **No devices exist before M8.** Until then every MMIO access is a BusError.
+
+Who may do what, by region (implemented once in `mem/phys/physical_bus`):
+
+| Region | Fetch | Load | Store | SWAP | PTE read | PTE write-back |
+|---|---|---|---|---|---|---|
+| ROM | yes | yes | – | – | yes | – |
+| RAM | yes | yes | yes | yes | yes | yes |
+| MMIO | – | word, device page | word, device page | – | – | – |
+| unpopulated | – | – | – | – | – | – |
 
 ### MMIO device pages
 | Base | Device | IRQ |

@@ -1,7 +1,7 @@
 # Roadmap
 
-**Current status:** M1 in progress. Part 1 of 4 is done (instruction table, encoder/decoder,
-disassembler). M1 is delivered in four parts: (1) ISA tables, encode/decode, disassembler; (2) the reference
+**Current status:** M1 in progress. Parts 1 and 2 of 4 are done (instruction table, encoder/decoder,
+disassembler; reference interpreter with traps, interrupts, privilege and paging). M1 is delivered in four parts: (1) ISA tables, encode/decode, disassembler; (2) the reference
 interpreter; (3) the assembler and the `.ast` executable format; (4) the conformance suite.
 
 **Strategy: build a thin vertical slice first, then deepen it.** After M2 there is always a working,

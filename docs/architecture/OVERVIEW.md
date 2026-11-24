@@ -76,7 +76,9 @@ App_AsteriaStudio/
 
 ### Layout rules
 1. **One folder = one concept = one CMake target.** If you can't name a folder's single responsibility in
-   one line, it is split wrong.
+   one line, it is split wrong. A module with subfolders (`cpu/`, `mem/`, `io/`, `toolchain/`) gets one target
+   per **leaf** folder, named after its path: `src/cpu/core/` is `asteria::cpu_core`, `src/mem/phys/` is
+   `asteria::mem_phys`. The dependency table in section 2 applies to the top-level module.
 2. **Headers live next to their `.cpp`.** Include paths start at `src/`: `#include "mem/cache/cache.hpp"`.
    The path tells you the module.
 3. **Namespaces mirror folders:** `asteria::mem::cache`.
@@ -130,6 +132,7 @@ The same graph as an exact table (the source of truth for `target_link_libraries
 | Contract | Purpose | Implemented by | Used by |
 |---|---|---|---|
 | `ClockDomain` / `Clocked` | `evaluate()` then `commit()` on each edge (D10) | every stateful component | scheduler |
+| `FunctionalMemory` | untimed subset of `MemPort` for the M1 interpreter: access now or fail now, `accepts()` to check first, debug access (D7) | `mem/phys` bus | reference interpreter, loader |
 | `MemPort` | request (with ID) → may be refused → response echoing the ID after N cycles; requester stalls. Plus side-effect-free `debug_read`/`debug_write` (D7) | RAM, caches, MMU, bus, DRAM controller | CPUs, walker, DMA, caches (downstream), loader, debugger |
 | `IrqLine` | level-sensitive interrupt wire | interrupt controller input | devices |
 | `Probe` | cache probe for DMA coherence (D13) | caches | DMA |
