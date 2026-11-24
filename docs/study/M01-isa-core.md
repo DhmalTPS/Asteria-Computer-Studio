@@ -7,8 +7,8 @@ grows one section per part:
 |---|---|---|
 | 1 | Instruction table, encoder, decoder, disassembler (`src/isa/`) | done |
 | 2 | Reference interpreter: the CPU that defines "correct" (`src/cpu/`, `src/mem/phys/`) | done |
-| 3 | Assembler and the `.ast` executable format | next |
-| 4 | ISA conformance suite | |
+| 3 | Assembler, the `.ast` executable format, the machine and the CLI (`src/toolchain/`, `src/machine/`) | done |
+| 4 | ISA conformance suite | next |
 
 ---
 
@@ -268,3 +268,187 @@ All are written into the spec (§4.7, §8.4), the memory map and D7.
 9. VA `0x0040_0123` maps through a 4 KiB leaf with PPN `0x80020`. What is the physical address? What if the
    leaf were a superpage with PPN `0x80000`?
 10. Why are `TLBFLUSH` and `FENCE.I` no-ops in the interpreter, and why won't they be in M3/M4?
+
+---
+
+## Part 3: the assembler, the executable format and the machine (`src/toolchain/`, `src/machine/`)
+
+**Read in this order** (about 90 minutes):
+1. `src/toolchain/as/assembler.cpp`: `run()`, then `pass1_line()`, `layout()`, `pass2()`, `finish()`.
+   **The most important file in part 3.**
+2. `src/toolchain/as/lexer.cpp`: one line of text into tokens
+3. `src/toolchain/axf/axf.hpp` and `axf.cpp`, with [formats/AXF.md](../formats/AXF.md) open beside them
+4. `src/machine/machine.cpp`: load an executable, run it, decide why it stopped
+5. `apps/asteria/main.cpp`: the `build`, `run` and `disasm` commands
+6. `src/toolchain/as/listing.cpp`: executable back to source
+7. `tests/unit/toolchain/as/assembler_test.cpp`: every rule of spec §11 as a test
+
+Try it:
+```
+asteria run examples/sum.asm --trace
+asteria build examples/sum.asm
+asteria disasm examples/sum.ast -o sum.lst.asm
+asteria build sum.lst.asm -o again.ast        (again.ast is byte-identical to sum.ast)
+```
+
+### 1. The whole path, source to registers
+
+```
+ sum.asm ──lexer──► tokens ──pass 1──► statements + sizes + symbol table
+                                   │
+                              layout: give each section an address
+                                   │
+                    pass 2: encode every statement into bytes
+                                   │
+                    finish: segments + entry + symbols ──► AXF executable (.ast)
+                                                                 │
+                            Machine::load: copy segments into RAM, PC = entry, sp = top of RAM
+                                                                 │
+                            Machine::run: step the interpreter until HALT (or a reason to stop)
+```
+
+Each arrow is a separate function with its own tests. Nothing in `toolchain/` knows the simulator
+exists (OVERVIEW §2). The `machine` is the only place where the two meet.
+
+### 2. Why two passes
+
+```asm
+        BEQ  a0, zero, done      ; line 1: where is "done"? Not known yet.
+        ...
+done:   HALT
+```
+
+To encode line 1, the assembler needs the address of `done`, which appears later. So:
+
+- **Pass 1** reads every line and works out **how many bytes** each statement takes. A location counter
+  per section advances by that size, and each label gets (section, offset). Nothing is encoded yet.
+- **Layout** places the sections: `.text` at `0x8000_0000`, then `.rodata`, `.data`, `.bss`, each on a
+  fresh page. Now every label has an address.
+- **Pass 2** reads the statements again and encodes them. Every symbol is known by now.
+
+The catch: pass 1 must know every statement's size *before* it knows the labels. `LA` is always 2
+instructions, so it can take a label. `LI` picks 1 or 2 instructions **depending on the value**, so the
+value must be known in pass 1: a number, or a constant defined *above*. The same rule holds for `.space`,
+`.align` and `.equ`. That is the "constant defined above" error. It isn't an arbitrary restriction: it
+follows from having two passes.
+
+Pass 2 runs even when pass 1 found errors, so one build reports everything. That is safe because a
+statement that failed in pass 1 was never recorded, so pass 2 can't disagree about sizes. The errors
+are then sorted back into source order.
+
+### 3. Pseudo-instructions and splitting a 32-bit value
+
+The hardware has 16-bit immediates. A 32-bit constant takes two instructions:
+
+```
+LI t0, 0x1234_8765     →   LUI t0, 0x1234          t0 = 0x1234_0000
+                           ORI t0, t0, 0x8765      t0 = 0x1234_8765   (ORI zero-extends)
+```
+
+With `ADDI` instead of `ORI` there's a trap. `ADDI` **sign-extends**, so `0x8765` becomes `0xFFFF_8765`,
+which is −0x789B, and the result comes out as `0x1233_8765`: one too small in the top half. `%hi_adj`
+fixes this by rounding the top half up when bit 15 is set:
+
+```
+%hi_adj(0x1234_8765) = (0x1234_8765 + 0x8000) >> 16 = 0x1235
+LUI t1, 0x1235  +  ADDI t1, t1, %lo(...)   =   0x1235_0000 − 0x789B   =   0x1234_8765  ✓
+```
+
+MIPS and RISC-V use the same trick (RISC-V's `%hi` is already the adjusted one). Asteria keeps both
+operators, so `LUI` + `ORI` stays the simple case.
+
+### 4. Branch targets are counted in instructions
+
+`BEQ a0, a1, done` stores `(address(done) − PC) / 4` in the immediate. Counting instructions instead of
+bytes gives 4× the reach from the same 16 bits, because the low two bits of a byte offset would always
+be 0. The assembler rejects a target that isn't a multiple of 4 away, or is out of reach. In source,
+`+2` and `-1` mean "that many instructions", and anything else is an address.
+
+### 5. The executable format: one canonical form
+
+An executable needs three things:
+- what to load where: **segments**, each with R/W/X permissions;
+- where to start: the **entry** point;
+- names for addresses: **symbols**, for the disassembler and the debugger.
+
+`.bss` costs nothing in the file: its segment has `mem_size` > 0 but no data, and the loader fills it
+with zeros.
+
+The design rule that keeps AXF trustworthy: a given executable has **exactly one** valid byte layout.
+`write()` produces it, `read()` accepts nothing else, and `validate()` states every semantic rule once.
+So `read(write(x)) == x` and `write(read(b)) == b`. A fuzz test flips random bits in a valid file 20,000
+times, and checks that every file `read()` still accepts obeys both equations. Readers that accept
+"almost right" files are a common source of security holes in real formats.
+
+Segments start on page boundaries because, once the OS exists (M12), each page gets one set of
+permissions in its PTE. `.text` is R+X and `.data` is R+W, so they can't share a page.
+
+### 6. The machine: load, run, and why it stopped
+
+`Machine::load` does five things, in order:
+1. Validates the executable.
+2. Checks that the segments fit in RAM.
+3. Resets the CPU.
+4. Writes every segment's **full** image, zeros included, so a second program can't see the first one's
+   leftovers.
+5. Sets PC = entry and `sp` = top of RAM.
+
+`Machine::run` steps the interpreter and stops for exactly one of four reasons:
+
+| Reason | When | CLI exit code |
+|---|---|---|
+| Halted | `HALT`; the exit code is `a0` | 0 if `a0` = 0, else 1 |
+| StepLimit | `--max-steps` reached (default 10 million) | 3 |
+| StuckTrap | the same trap at the same PC twice in a row: a trap that leads straight back to itself | 3 |
+| WaitingForever | `WFI` with nothing to wake it (no devices until M8) | 3 |
+
+StuckTrap matters because `TVEC` is 0 after reset. Take a program with no handler that faults:
+1. The fault jumps to ROM address 0.
+2. Address 0 holds the zero word, which is an illegal instruction.
+3. That traps to 0 again, forever.
+
+The CLI reports the **first** trap (the real bug), not only the loop it caused.
+
+### 7. The listing proves the assembler and disassembler agree
+
+`asteria disasm program.ast -o out.asm` writes a listing that **reassembles to the same bytes**, with
+the labels and the entry point too. That is part 1's round trip (decode ∘ encode) lifted to whole
+programs. It only works because the disassembler prints exactly the syntax the assembler reads
+(part 1, §6). Words that aren't instructions are listed as `.word`, so even data in `.text` survives.
+
+### Exam connection
+
+- **Two-pass assembler** (Mano, ch. 6 "Assembler"): a *location counter LC* and an *address symbol
+  table*. The first pass builds the table, and the second pass translates. That is `pass1()` and
+  `pass2()`, with one location counter per section.
+- **Assembler directives** (Hamacher, ch. 2: `ORIGIN`, `RESERVE`, `DATAWORD`, `EQU`) correspond to
+  Asteria's section switches, `.space`, `.word` and `.equ`. Directives produce no instructions; they
+  control the assembler.
+- **Translating and starting a program** (P&H §2.12):
+  - An object file has a header, text, data, relocation information, a symbol table and debug
+    information.
+  - The loader reads the header, copies text and data into memory, sets up the stack and jumps to the
+    start.
+  - That is AXF plus `Machine::load`. Relocation arrives with the linker in M9.
+- **PC-relative addressing** (P&H §2.10): branch target = PC + offset × 4. Know why the offset counts
+  words.
+- **Pseudo-instructions** (P&H §2.12): `LI`, `MOV` and `BGT` don't exist in hardware; the assembler
+  expands them. MIPS reserves `$at` for this. Asteria's expansions never need a scratch register.
+
+### Quiz (part 3)
+
+1. Why can't a one-pass assembler handle `BEQ a0, zero, done` when `done` is defined later? Name one
+   way real one-pass assemblers get around it.
+2. `LI a0, N` fails with "not a constant defined above" when `.equ N` comes later, but `ADDI a0, a0, N`
+   works. Explain exactly why.
+3. Write the two instructions for `LA t0, 0x8000_9ABC`. Then write the `LUI` + `ADDI` pair that loads
+   the same value.
+4. What does `.bss` cost in the `.ast` file, and what does it cost in memory?
+5. Why does each section start on a new page?
+6. `read(write(x)) == x` and `write(read(b)) == b`: why is the second equation the stronger guarantee?
+7. Why does `Machine::load` write a segment's zeros explicitly, instead of only its data?
+8. A program does `LW` from address 2 with no trap handler. Trace what happens, step by step, until the
+   machine stops. What does the CLI print?
+9. A branch at `0x8000_0010` targets `0x8000_0004`. What immediate does the assembler store?
+10. How does the listing round trip (assemble → disassemble → assemble) catch a bug that the part 1
+    round trip (encode → decode) can't?

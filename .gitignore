@@ -8,3 +8,6 @@ vcpkg_installed/
 .vscode/
 *.user
 CMakeUserPresets.json
+
+# Outputs of the asteria CLI next to the examples
+/examples/*.ast

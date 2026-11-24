@@ -40,6 +40,14 @@ namespace asteria::ascii {
     return result;
 }
 
+[[nodiscard]] inline std::string to_lower(std::string_view text) {
+    std::string result{text};
+    for (char& c : result) {
+        c = to_lower(c);
+    }
+    return result;
+}
+
 [[nodiscard]] constexpr bool is_digit(char c) noexcept { return c >= '0' && c <= '9'; }
 
 [[nodiscard]] constexpr bool is_alpha(char c) noexcept {

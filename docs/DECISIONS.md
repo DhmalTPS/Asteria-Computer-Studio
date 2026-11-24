@@ -176,6 +176,10 @@ directories stored as ordinary files (so the tree, path lookup and hard links fa
 AXF ("Asteria eXecutable Format") is one ELF-like container used for both objects and executables:
 sections for the linker, permission-carrying segments for the loader, symbols, relocations, and a line
 table for the debugger.
+- The byte layout is specified in [formats/AXF.md](formats/AXF.md). Each executable has exactly one valid
+  encoding, and the reader accepts only that one.
+- History: 2026-11-25. M1 implements the executable subset (header, segments, symbols); `.aso`,
+  relocations and the line table come with the linker in M9.
 
 ## D18. Code structure: layered modules, siblings never depend on each other
 **Accepted.** See [architecture/OVERVIEW.md](architecture/OVERVIEW.md). Code is organized by **function,

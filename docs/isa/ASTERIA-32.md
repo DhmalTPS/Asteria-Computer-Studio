@@ -394,7 +394,25 @@ label:                           .L_local:   (file-local; not exported)
     LW    t0, 8(sp)              ; memory operand: imm(base)
     BEQ   a0, zero, done
 ```
-Mnemonics and register names are case-insensitive. Labels are case-sensitive.
+Mnemonics, register names, CSR names and directives are case-insensitive. Labels and constants are
+case-sensitive.
+
+- **Names** match `[A-Za-z_.$][A-Za-z0-9_.$]*`. A label can't be a register name. Only local labels
+  (`.L…`) may start with `.`; they are never exported. Each name is defined once per file.
+- **Numbers**: decimal `42`, hex `0x2A`, binary `0b101010`, with `_` as a separator (`0x8000_0000`).
+  Character literals `'A'` and strings `"…"` take the escapes `\n \t \r \0 \\ \' \" \xHH`.
+- **Values** are sums: `term (+|- term)*`, where a term is a number, a constant or a label, with
+  optional leading signs. A 32-bit value may be written signed or unsigned: `-1` and `0xFFFFFFFF` are
+  the same word.
+- **Branch and jump targets.** A target that starts with `+` or `-` counts *instructions* from this
+  one: `BEQ a0, a1, +2` skips one instruction. Any other target is an *address*, usually a label:
+  `BEQ a0, a1, done`. The assembler turns an address into a count, and rejects one that is not a
+  whole number of instructions away or is out of reach.
+- **CSRs** are written by name (`STATUS`) or by number (`0`–`4095`).
+- **Constants vs. labels.** `.equ` defines a constant. Anything that decides a statement's *size* (the
+  value of `LI`, `.space`, `.align`, and `.equ` itself) must use numbers and constants defined
+  *above* it: sizes are fixed in pass 1, before later lines are read. Everything else may use any
+  constant or label in the file, defined before or after.
 
 ### 11.2 Pseudo-instructions
 | Pseudo | Expands to |
@@ -414,13 +432,50 @@ Mnemonics and register names are case-insensitive. Labels are case-sensitive.
 | `RET` | `JALR R0, R31, 0` |
 | `CSRR rd, csr` / `CSRW csr, rs` | `CSRRS rd, csr, R0` / `CSRRW R0, csr, rs` |
 
-`%hi(sym)` is the upper 16 bits. `%lo(sym)` is the lower 16 bits, zero-extended for `ORI`. When `%lo` is
-used in a sign-extending context (`LW rd, %lo(sym)(rt)`), the linker uses `%hi_adj` = `(sym + 0x8000) >> 16`.
+`LI` takes a constant value (see 11.1), so its length is known in pass 1. `LA` takes any value, a
+label included, and is always two instructions.
+
+**Splitting a 32-bit value.** Each operator gives a raw 16-bit field of a 32-bit value `x`:
+
+| Operator | Field | Pair it with |
+|---|---|---|
+| `%hi(x)` | `x >> 16` | `ORI` (zero-extends): `LUI r, %hi(x)` + `ORI r, r, %lo(x)` |
+| `%lo(x)` | `x & 0xFFFF` | either |
+| `%hi_adj(x)` | `((x + 0x8000) >> 16) & 0xFFFF` | a sign-extending user: `LUI r, %hi_adj(x)` + `ADDI r, r, %lo(x)` or `LW rd, %lo(x)(r)` |
+
+A 16-bit immediate that sign-extends reads the `%lo` field sign-extended. When bit 15 of `x` is set,
+that adds `-0x10000`, and `%hi_adj` has rounded the upper half up by one to cancel it. The operators
+fit only 16-bit immediates.
 
 ### 11.3 Directives
-`.text .data .rodata .bss` (sections) · `.global sym` · `.extern sym` · `.word .half .byte` ·
-`.ascii .asciz` · `.space n` · `.align n` (2ⁿ) · `.equ name, value` · `.include "file"` ·
-`.macro name args … .endm` · `.entry sym`
+| Directive | Meaning | M1 |
+|---|---|---|
+| `.text .rodata .data .bss` | switch section | yes |
+| `.global sym …` | export labels (marked global in the symbol table) | yes |
+| `.entry sym` | the entry point: a label on an instruction in `.text` (default: start of `.text`) | yes |
+| `.equ name, value` | define a constant | yes |
+| `.word .half .byte v, …` | 4, 2, 1-byte little-endian values; `.word`/`.half` need an aligned offset | yes |
+| `.ascii "s", …` / `.asciz "s", …` | string bytes; `.asciz` adds a NUL after each | yes |
+| `.space n` | `n` zero bytes | yes |
+| `.align n` | pad with zeros to a multiple of 2ⁿ, `n` = 0–12 | yes |
+| `.extern sym` | refer to a symbol in another file | M9 (linker) |
+| `.include "file"` | insert another file | M9 |
+| `.macro name args … .endm` | macros | M9 |
+
+### 11.4 Sections and layout (M1)
+- Instructions go only in `.text`, at word-aligned offsets. Data directives work in any section but
+  `.bss`, which holds only `.space` and `.align`: it has no bytes in the file.
+- The assembler lays out the sections in the order `.text`, `.rodata`, `.data`, `.bss`, each starting
+  on a fresh page, from `0x8000_0000` (start of RAM). An empty section takes no space. Each non-empty
+  section becomes one segment of the executable: `.text` R+X, `.rodata` R, `.data` R+W, `.bss` R+W.
+- Every label that isn't local goes in the symbol table; `.global` marks it global. With one file and
+  no linker, "global" changes nothing yet; it is recorded for M9.
+- The output is an AXF executable ([formats/AXF.md](../formats/AXF.md)). Relocatable objects and
+  linking arrive in M9.
+
+### 11.5 Errors
+Every error reads `file:line:column: error: message`. One build reports all errors (at most 50 are
+printed), in source order, and writes no output file.
 
 ## 12. Calling convention (ABI)
 

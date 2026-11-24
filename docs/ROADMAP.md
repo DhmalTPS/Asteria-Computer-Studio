@@ -1,8 +1,10 @@
 # Roadmap
 
-**Current status:** M1 in progress. Parts 1 and 2 of 4 are done (instruction table, encoder/decoder,
-disassembler; reference interpreter with traps, interrupts, privilege and paging). M1 is delivered in four parts: (1) ISA tables, encode/decode, disassembler; (2) the reference
-interpreter; (3) the assembler and the `.ast` executable format; (4) the conformance suite.
+**Current status:** M1 in progress. Parts 1–3 of 4 are done (instruction table, encoder/decoder,
+disassembler; reference interpreter with traps, interrupts, privilege and paging; assembler v1, the
+AXF `.ast` format, the machine and the `asteria build | run | disasm` CLI). M1 is delivered in four
+parts: (1) ISA tables, encode/decode, disassembler; (2) the reference interpreter; (3) the assembler
+and the `.ast` executable format; (4) the conformance suite.
 
 **Strategy: build a thin vertical slice first, then deepen it.** After M2 there is always a working,
 demoable program, and every later milestone makes an existing path deeper instead of adding disconnected parts.

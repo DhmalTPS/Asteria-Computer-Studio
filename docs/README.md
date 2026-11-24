@@ -10,12 +10,12 @@ The docs are the **source of truth**. Code implements them. When a design change
 4. [platform/MEMORY-MAP.md](platform/MEMORY-MAP.md): physical and virtual address spaces.
 5. [ROADMAP.md](ROADMAP.md): milestones and what "done" means.
 6. [architecture/CODING-STYLE.md](architecture/CODING-STYLE.md): conventions every file follows.
-7. [references/README.md](references/README.md): reviews of five external projects, what Asteria
+7. [formats/AXF.md](formats/AXF.md): the executable file format (M1 subset; full in M9).
+8. [references/README.md](references/README.md): reviews of five external projects, what Asteria
    adopts from them, and what it avoids.
-8. `study/`: one note per finished milestone, a design walkthrough plus an interview quiz.
+9. `study/`: one note per finished milestone, a design walkthrough plus an interview quiz.
    Start with [study/M00-foundation.md](study/M00-foundation.md), then [study/M01-isa-core.md](study/M01-isa-core.md).
 
 ## Planned
-- `formats/AXF.md`: object/executable container (M1 subset, full in M9)
 - `platform/DEVICES.md`: device register layouts (M8)
 - `formats/DISK.md`: filesystem on-disk format (M11)
