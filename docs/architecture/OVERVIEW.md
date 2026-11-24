@@ -70,6 +70,7 @@ App_AsteriaStudio/
 └── tests/                    Mirrors src/ exactly, so the test for src/X/Y lives in tests/unit/X/
     ├── unit/<module>/        Catch2 unit tests per module
     ├── isa/                  Self-checking .asm conformance tests (HALT with a0 = 0 means pass)
+    ├── cli/                  The asteria CLI's contract: exit codes and messages
     ├── diff/                 Differential fuzzer: interpreter vs each CPU
     └── bench/                Benchmark programs (matmul, sort, sequential, random)
 ```

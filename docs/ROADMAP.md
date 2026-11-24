@@ -1,10 +1,10 @@
 # Roadmap
 
-**Current status:** M1 in progress. Parts 1–3 of 4 are done (instruction table, encoder/decoder,
-disassembler; reference interpreter with traps, interrupts, privilege and paging; assembler v1, the
-AXF `.ast` format, the machine and the `asteria build | run | disasm` CLI). M1 is delivered in four
-parts: (1) ISA tables, encode/decode, disassembler; (2) the reference interpreter; (3) the assembler
-and the `.ast` executable format; (4) the conformance suite.
+**Current status:** M1 is complete. All four parts are done: (1) the instruction table,
+encoder/decoder and disassembler; (2) the reference interpreter with traps, interrupts, privilege and
+paging; (3) assembler v1, the AXF `.ast` format, the machine and the `asteria build | run | disasm`
+CLI; (4) the ISA conformance suite (`tests/isa/`, nine self-checking programs, mutation-tested) and
+the round-trip and CLI tests. M2 starts only on an explicit go.
 
 **Strategy: build a thin vertical slice first, then deepen it.** After M2 there is always a working,
 demoable program, and every later milestone makes an existing path deeper instead of adding disconnected parts.
@@ -19,7 +19,7 @@ Each milestone is **done** only when:
 | # | Milestone | Delivers | Demo |
 |---|---|---|---|
 | **M0** | Foundation | Repo layout, CMake presets, vcpkg, warnings-as-errors, Catch2, GitHub Actions CI, `common/` | `ctest` green in CI |
-| **M1** | ISA core | `isa/` tables, encode/decode, disassembler; **reference interpreter** (all instructions, CSRs, traps, interrupts, privilege, and paging through its own functional page walk; untimed, over flat physical memory); assembler v1 (one file → `.ast`, pseudo-ops, directives); ISA conformance suite | `asteria run hello.asm` prints registers; assemble → disasm → reassemble round-trips |
+| **M1** | ISA core | `isa/` tables, encode/decode, disassembler; **reference interpreter** (all instructions, CSRs, traps, interrupts, privilege, and paging through its own functional page walk; untimed, over flat physical memory); assembler v1 (one file → `.ast`, pseudo-ops, directives); ISA conformance suite | `asteria run examples/sum.asm` prints registers; assemble → disasm → reassemble round-trips; `tests/isa/` passes |
 | **M2** | First Studio | ImGui app: editor, Build, Run/Step on the interpreter, register/memory/disassembly views | **First README GIF** |
 | **M3** ★ | Single-cycle CPU | `sim/` scheduler and two-phase commit, `MemPort` with ideal memory; datapath with explicit control signals and per-cycle trace; **differential fuzzer** vs interpreter | Same program, interpreter vs CPU, identical state; control-signal view |
 | **M4** ★ | Multi-cycle + Pipeline | FSM CPU (IR/MAR/MDR/A/B/ALUOut); 5-stage pipeline with forwarding, load-use stall, flush, **precise exceptions**, predictors (static, 2-bit, BTB); stage-latency timing model (D8); 3-CPU comparison report | Pipeline diagram view; CPI/T_clk/wall-time table for all three CPUs |

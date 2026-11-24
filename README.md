@@ -8,10 +8,11 @@ cycle-aware memory system (caches, MMU/TLB, DRAM controller with real timing), i
 with DMA, a self-written toolchain (assembler, linker, C compiler, debugger), and **AsteriaOS**, which runs
 on the virtual machine. All of it lives in one Windows desktop application where you can see every cycle.
 
-> Status: **M1 in progress.** The instruction set exists as code (instruction table, encoder, decoder,
+> Status: **M1 complete.** The instruction set exists as code (instruction table, encoder, decoder,
 > disassembler), the reference interpreter executes it (every instruction, CSRs, traps, interrupts,
-> privilege and paging), and the assembler turns `.asm` source into `.ast` executables that
-> `asteria run` executes. Next: the ISA conformance suite. See [docs/ROADMAP.md](docs/ROADMAP.md).
+> privilege and paging), the assembler turns `.asm` source into `.ast` executables that
+> `asteria run` executes, and a self-checking conformance suite pins the ISA down for the CPUs to
+> come. Next: M2, the single-cycle CPU. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 No existing emulator, assembler, cache or memory simulator is used. Third-party code is limited to
 the GUI (Dear ImGui, ImPlot) and the test framework (Catch2).
@@ -21,7 +22,7 @@ Start at [docs/README.md](docs/README.md).
 
 ## Honest limitations
 Kept current as the project grows (policy D25).
-- Only M0 and most of M1 exist so far: build system, core utilities, the instruction set as data, the
+- Only M0 and M1 exist so far: build system, core utilities, the instruction set as data, the
   reference interpreter, a one-file assembler (no macros, includes or linking until M9) and the
   `asteria` CLI. There are no devices yet (M8), so a program reports its result through registers
   and its exit code, not by printing. Everything else described above is specified in `docs/` and

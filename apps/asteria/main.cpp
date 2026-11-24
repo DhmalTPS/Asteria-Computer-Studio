@@ -340,8 +340,10 @@ int cmd_disasm(std::span<char* const> args) {
 int main(int argc, char* argv[]) {
     const std::span<char* const> args{argv + 1, static_cast<std::size_t>(argc - 1)};
     if (args.empty()) {
+        // No command is a usage error, like an unknown one: a script must not mistake it for
+        // success. `asteria help` asks for the text and exits 0.
         print_usage();
-        return kExitOk;
+        return kExitUsage;
     }
     const std::string_view command = args[0];
     const auto rest = args.subspan(1);

@@ -8,7 +8,7 @@ grows one section per part:
 | 1 | Instruction table, encoder, decoder, disassembler (`src/isa/`) | done |
 | 2 | Reference interpreter: the CPU that defines "correct" (`src/cpu/`, `src/mem/phys/`) | done |
 | 3 | Assembler, the `.ast` executable format, the machine and the CLI (`src/toolchain/`, `src/machine/`) | done |
-| 4 | ISA conformance suite | next |
+| 4 | ISA conformance suite and the CLI contract tests (`tests/isa/`, `tests/cli/`) | done |
 
 ---
 
@@ -452,3 +452,124 @@ programs. It only works because the disassembler prints exactly the syntax the a
 9. A branch at `0x8000_0010` targets `0x8000_0004`. What immediate does the assembler store?
 10. How does the listing round trip (assemble → disassemble → assemble) catch a bug that the part 1
     round trip (encode → decode) can't?
+
+---
+
+## Part 4: the conformance suite (`tests/isa/`, `tests/cli/`)
+
+**Read in this order** (about 60 minutes):
+1. `tests/isa/README.md`: what each program covers, and what is deliberately left out
+2. `tests/isa/alu.asm`: the simplest program; learn the check pattern here
+3. `tests/isa/traps.asm`: a trap handler that logs every trap, and a trip into User mode
+4. `tests/isa/paging.asm`: building page tables in assembly, then faulting on purpose
+5. `tests/isa/mutation_test.cpp`: how the suite tests *itself*
+6. `tests/cli/CMakeLists.txt` and `cmake/ExpectExit.cmake`: the CLI's exit codes as a contract
+
+Try it: `ctest --preset debug -R "conformance|roundtrip|cli"`
+
+### 1. Why programs, not more unit tests?
+
+The unit tests call C++ functions of *this* interpreter. M2–M4 build three new CPUs with different
+insides, and C++ unit tests of the interpreter say nothing about them. A program in assembly is the
+one thing every CPU accepts. So the specification is written down a second time, as executable
+checks, in the only language all the CPUs share. The same nine files will run on the single-cycle,
+multi-cycle and pipelined CPUs unchanged.
+
+### 2. The check pattern
+
+```asm
+        LI      a0, 7                   ; check 7: what it tests
+        <compute a result into t0>
+        LI      t1, <the value the spec requires>
+        BNE     t0, t1, fail            ; mismatch: halt with a0 = 7
+        ...
+        LI      a0, 0                   ; everything passed
+fail:   HALT                            ; exit code = a0
+```
+
+There is no test framework: one register, one branch and `HALT`. That is deliberate. A program
+that needs a working framework can't test the most basic things, and a broken CPU can't run a
+framework. The expected values come from the **spec**, worked out by hand (the comments show the
+arithmetic), never copied from the interpreter's output. Otherwise the suite would only prove that
+the interpreter agrees with itself.
+
+### 3. Testing traps: a logging handler
+
+To check a trap you have to survive it. `traps.asm` and `paging.asm` install a handler that:
+1. Writes CAUSE, EPC, BADVADDR and STATUS (at entry) to a log in memory.
+2. Returns past the faulting instruction (EPC + 4).
+3. Handles two special cases:
+   - a failed *fetch* returns to `ra`, because "the next instruction" after a bad jump target is
+     also bad;
+   - `ECALL` from User mode jumps back into the kernel instead of returning to the user.
+
+The checks then compare log entries with what the spec says. User mode is entered the way a real OS
+does it: clear `PIE` and `PKM`, put the user PC in `EPC`, and `ERET`.
+
+### 4. Who tests the tests? Mutation testing
+
+A check can be useless in two ways: it never runs (a jump skips it), or it can never fail (it compares
+a register with itself). Both look like "pass". `mutation_test.cpp` finds them: for every line
+`Bxx …, fail` it builds a copy of the program with that one condition inverted (`BNE` ↔ `BEQ`) and
+requires the copy to **fail**. If inverting a check changes nothing, the check was doing nothing.
+The sweep found nothing to fix, but it was proven to work by planting a dead check: the sweep
+reported it at once.
+
+### 5. Gaps found by asking "what isn't covered?"
+
+Reviewing the suite against the spec, section by section, turned up rules no test touched yet, so
+they were added:
+- **Alignment is checked before translation** (§4.4): a misaligned load to an *unmapped* page must
+  report `LoadMisaligned`, not a page fault.
+- **A bus error during the page walk** (§8.4) reports the access's BusError with the *virtual*
+  address.
+- **Code written at run time** (§9): store an instruction, `FENCE.I`, execute it. In M1 there is no
+  I-cache, so this passes trivially; in M4 it is the test that catches a missing cache flush.
+- **The CLI's exit codes** (0, 1, 2, 3): a script relies on them, so `tests/cli/` checks each one,
+  together with its message. This found a real inconsistency: `asteria` with no command exited 0.
+  Now it exits 2, like any other usage error.
+
+What is still not covered, and why (interrupts, selective `TLBFLUSH`), is listed in
+`tests/isa/README.md`. Saying what is *not* tested is part of a test suite.
+
+### Exam connection
+
+- **Verification vs. validation**: the suite verifies that an implementation matches the spec. A
+  CPU textbook's "test program" for a datapath (Patterson & Hennessy ch. 4 exercises) is the same
+  idea on a small scale.
+- **Exceptions in a pipeline** (P&H §4.9, Hamacher): the trap tests check *precise* behaviour (rd not
+  written, memory unchanged, EPC = the faulting instruction). These are exactly the properties a
+  pipeline can get wrong when a later stage has already started.
+- **Self-modifying code and caches** (P&H ch. 5, split I/D caches): why an instruction cache can
+  hold a stale copy, and why `FENCE.I` exists.
+
+### Quiz (part 4)
+
+1. Why can't the interpreter's unit tests check the M2–M4 CPUs?
+2. Why must expected values come from the spec, not from running the interpreter?
+3. In `traps.asm`, why does a failed fetch return to `ra` instead of `EPC + 4`?
+4. How does the kernel enter User mode for the first time? Which STATUS bits does it set up, and
+   why does it use `ERET` rather than a jump?
+5. What is a mutant, and what does a surviving mutant tell you?
+6. `LW t0, 2(t3)` with `t3` pointing to an unmapped page: which exception, and why that one?
+7. Why does the `FENCE.I` check pass trivially today, and when will it start to matter?
+8. Why does a CLI's exit code deserve tests of its own?
+
+---
+
+## M1 final quiz (all four parts)
+
+Answer without notes, then check against the sections above.
+
+1. Trace `BEQ a0, a1, done` from source text to a taken branch: the assembler's two passes, the
+   encoding, decode, and `PC + imm × 4`.
+2. Why is decoding strict, and which later tool depends on it?
+3. Name the rule that makes traps precise, and show it for `SW` to a read-only page with paging on.
+4. What do trap entry and `ERET` do to STATUS? Why is it "a stack of depth one"?
+5. Walk VA `0x0040_2010` through the tables of `paging.asm`: which entries are read, what is the
+   physical address, and which PTE bits change?
+6. Why does `LI` need a constant defined above, while `LA` accepts any label?
+7. `%hi_adj`: when does it differ from `%hi`, and why?
+8. What does an `.ast` file contain, and why is there exactly one valid encoding of each executable?
+9. Name the four ways `asteria run` can stop, with their exit codes.
+10. How do you know the conformance suite would catch a broken CPU?

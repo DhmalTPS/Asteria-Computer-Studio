@@ -2,6 +2,8 @@ find_package(Catch2 3 CONFIG REQUIRED)
 include(Catch)  # catch_discover_tests()
 
 add_subdirectory(unit)
+add_subdirectory(isa)
+add_subdirectory(cli)
 
 # Architecture rules: no module may #include a module it is not allowed to depend on (D18).
 add_test(NAME architecture/layering
