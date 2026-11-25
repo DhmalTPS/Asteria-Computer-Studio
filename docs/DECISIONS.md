@@ -76,7 +76,7 @@ is "1 cycle + memory stall cycles" per instruction.
   response is discarded. A mispredict must not lose a write-back (a bug found in MARSS).
 - **Untimed subset (M1).** The reference interpreter has no time, so it uses `sim::FunctionalMemory`: an
   access happens now or fails now, plus `accepts()` (would it succeed?) so the interpreter can stay precise,
-  plus the same `debug_read`/`debug_write`. The timed port arrives with the timed CPUs in M2.
+  plus the same `debug_read`/`debug_write`. The timed port arrives with the timed CPUs in M3.
 - History: 2026-11-18. IDs, accept/refuse, debug access, and the flush rule added (references review, P1/P3).
   2026-11-24. Untimed `FunctionalMemory` subset added for the M1 interpreter.
 

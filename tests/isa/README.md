@@ -2,7 +2,7 @@
 
 Self-checking assembly programs, one per instruction group. They define what every Asteria CPU must
 do: the reference interpreter passes them now, and the single-cycle, multi-cycle and pipelined CPUs
-(M2–M4) must pass the same files unchanged.
+(M3–M4) must pass the same files unchanged.
 
 | Program | Covers (spec section) |
 |---|---|

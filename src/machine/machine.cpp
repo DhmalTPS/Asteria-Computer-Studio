@@ -40,7 +40,7 @@ Result<void> Machine::load(const toolchain::axf::Executable& exe) {
         ASTERIA_ASSERT(written, "segment was checked to fit in RAM");
     }
     // The interpreter has no instruction cache, so nothing needs FENCE.I here. The timed
-    // machines (M2+) will flush their caches at this point (spec §9).
+    // machines (M3+) will flush their caches at this point (spec §9).
     cpu_.set_pc(exe.entry);
     cpu_.registers().write(isa::reg::kSp, static_cast<u32>(ram_end));  // stack grows down
     return {};

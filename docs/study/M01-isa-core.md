@@ -158,7 +158,7 @@ state as the interpreter". So the interpreter is written for **clarity**, never 
                         ▼
    ExecContext:  regs()  csrs()  load()  store()  swap()  fence_i()  tlb_flush()
                         ▲ implemented by
-          interpreter (M1)     single-cycle (M2)     multi-cycle (M3)
+          interpreter (M1)     single-cycle (M3)     multi-cycle (M4)
           "how": functional    "how": a datapath     "how": FSM states
 ```
 
@@ -267,7 +267,7 @@ All are written into the spec (§4.7, §8.4), the memory map and D7.
    the undefined behaviour?
 9. VA `0x0040_0123` maps through a 4 KiB leaf with PPN `0x80020`. What is the physical address? What if the
    leaf were a superpage with PPN `0x80000`?
-10. Why are `TLBFLUSH` and `FENCE.I` no-ops in the interpreter, and why won't they be in M3/M4?
+10. Why are `TLBFLUSH` and `FENCE.I` no-ops in the interpreter, and why won't they be in later CPUs (an instruction cache from M4–M5, TLBs in M7)?
 
 ---
 
@@ -470,7 +470,7 @@ Try it: `ctest --preset debug -R "conformance|roundtrip|cli"`
 
 ### 1. Why programs, not more unit tests?
 
-The unit tests call C++ functions of *this* interpreter. M2–M4 build three new CPUs with different
+The unit tests call C++ functions of *this* interpreter. M3–M4 build three new CPUs with different
 insides, and C++ unit tests of the interpreter say nothing about them. A program in assembly is the
 one thing every CPU accepts. So the specification is written down a second time, as executable
 checks, in the only language all the CPUs share. The same ten files will run on the single-cycle,
@@ -589,7 +589,7 @@ What is still not covered, and why (interrupts, selective `TLBFLUSH`), is listed
 
 ### Quiz (part 4)
 
-1. Why can't the interpreter's unit tests check the M2–M4 CPUs?
+1. Why can't the interpreter's unit tests check the M3–M4 CPUs?
 2. Why must expected values come from the spec, not from running the interpreter?
 3. In `traps.asm`, why does a failed fetch return to `ra` instead of `EPC + 4`?
 4. How does the kernel enter User mode for the first time? Which STATUS bits does it set up, and

@@ -2,7 +2,7 @@
 // FunctionalMemory: the contract between an UNTIMED memory user and physical memory.
 //
 // The full memory-port protocol (D7: request IDs, accept/refuse, responses after N cycles)
-// arrives with the timed CPUs in M2. The reference interpreter (M1) has no notion of time:
+// arrives with the timed CPUs in M3. The reference interpreter (M1) has no notion of time:
 // an access either happens now or fails now. This interface is that untimed subset, and it
 // keeps the same layering: the CPU sees only this contract, never a concrete RAM, ROM or bus.
 //
