@@ -208,7 +208,15 @@ and an enabled interrupt is taken at the next boundary, so its EPC points *after
 | `CSRRWI/SI/CI rd, csr, uimm5` | As above, using `zext(rs1 field)` as the 5-bit operand |
 
 An unknown CSR, or a write to a read-only CSR, raises `IllegalInstruction`. Accessing a K-only CSR
-from User mode raises `PrivilegeViolation`.
+from User mode raises `PrivilegeViolation`. The `IllegalInstruction` checks come first: a User-mode
+write to `CYCLE` or to `IPEND` is `IllegalInstruction`, a User-mode write to `SCRATCH` is
+`PrivilegeViolation`.
+
+"Writes" is decided from the **encoding**, never from a register's value: `CSRRS`/`CSRRC` write
+unless the rs1 *field* is 0 (R0, or `uimm5 = 0` for the immediate forms), and `CSRRW`/`CSRRWI`
+always write. So `CSRRS t0, CPUID, zero` is a legal read, but `CSRRS t0, CPUID, t1` is
+`IllegalInstruction` even when t1 holds 0, and so is `CSRRWI t0, CPUID, 0`. Hardware can then decide
+legality in decode, before any register is read.
 
 ## 5. Exceptions and interrupts
 
@@ -289,7 +297,7 @@ walker resolves it (D6).
 | `0x005` | `SCRATCH` | K rw | 0 | Free for the kernel (holds the kernel stack pointer on trap entry) |
 | `0x006` | `PTBR` | K rw | 0 | [31:12] root table PPN · [11:4] ASID · [0] EN (paging on) |
 | `0x007` | `IMASK` | K rw | 0 | [7:0] per-IRQ enable |
-| `0x008` | `IPEND` | K ro | – | [7:0] live interrupt lines |
+| `0x008` | `IPEND` | K ro | live | [7:0] live interrupt lines (0 while no device drives a line) |
 | `0x010` | `CYCLE` | ro | 0 | Low 32 bits of the cycle counter |
 | `0x011` | `CYCLEH` | ro | 0 | High 32 bits |
 | `0x012` | `INSTRET` | ro | 0 | Low 32 bits of instructions retired |
@@ -301,6 +309,9 @@ defined field stores exactly what was written (for example, CAUSE keeps bits [31
 
 **Counters.** `INSTRET` counts instructions that completed (an instruction that traps does not count).
 A CSR instruction that reads `INSTRET` sees the count *before* itself.
+`CYCLE` advances by **at least 1** for every instruction that completes or traps, so between two
+reads it grows by at least the number of instructions in between; it is otherwise
+implementation-defined. A CSR instruction that reads `CYCLE` also sees the count before itself.
 
 `CYCLE` is the **only** architecturally visible value that may legitimately differ between the
 three CPUs. The differential tester treats reads of it as non-comparable (§10).
@@ -331,7 +342,7 @@ VA = VPN1[31:22] | VPN0[21:12] | offset[11:0]
 ```
 1. a ← PTBR.PPN << 12 ; level ← 1
 2. pte ← M32[a + VPN_level × 4]        (physical read, via L2; bus error → access-type BusError)
-3. if pte.V = 0 or (pte.W = 1 and pte.R = 0) → PageFault(subcode 0 / 1)
+3. if pte.V = 0 → PageFault(subcode 0); if pte.W = 1 and pte.R = 0 → PageFault(subcode 1)
 4. if pte is a pointer:
        if level = 0 → PageFault(subcode 0)
        a ← pte.PPN << 12 ; level ← 0 ; goto 2

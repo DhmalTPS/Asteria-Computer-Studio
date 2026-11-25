@@ -78,5 +78,35 @@ main:
         REM     t0, s3, s2
         BNEZ    t0, fail
 
+        LI      a0, 8                   ; negative dividends by zero follow the same rule
+        DIV     t0, s5, zero            ; -7 / 0: all ones
+        BNE     t0, s2, fail
+        REM     t0, s5, zero            ; -7 % 0 = -7
+        BNE     t0, s5, fail
+        DIV     t0, s3, zero            ; INT_MIN / 0: all ones, not INT_MIN
+        BNE     t0, s2, fail
+        REM     t0, s3, zero
+        BNE     t0, s3, fail
+
+        LI      a0, 9                   ; mixed signs and magnitudes, worked out by hand
+        LI      t3, 0x7FFFFFFF
+        MULH    t0, s3, t3              ; -2^31 * (2^31 - 1) = -2^62 + 2^31 = 0xC0000000_80000000
+        LI      t1, 0xC0000000
+        BNE     t0, t1, fail
+        MUL     t0, s3, t3
+        BNE     t0, s3, fail            ; low half 0x80000000
+        MULHU   t0, s3, t3              ; 2^31 * (2^31 - 1) = 0x3FFFFFFF_80000000
+        LI      t1, 0x3FFFFFFF
+        BNE     t0, t1, fail
+        LI      t3, 0x10000
+        LI      t4, 0xFFFF0000          ; -2^16
+        MULH    t0, t3, t4              ; -2^32 = 0xFFFFFFFF_00000000: the high half is -1
+        BNE     t0, s2, fail
+        MUL     t0, t3, t4
+        BNEZ    t0, fail
+        MULHU   t0, t3, t4              ; 2^16 * (2^32 - 2^16) = 0x0000FFFF_00000000
+        LI      t1, 0xFFFF
+        BNE     t0, t1, fail
+
         LI      a0, 0
 fail:   HALT

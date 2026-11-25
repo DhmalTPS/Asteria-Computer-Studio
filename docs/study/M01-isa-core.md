@@ -462,8 +462,9 @@ programs. It only works because the disassembler prints exactly the syntax the a
 2. `tests/isa/alu.asm`: the simplest program; learn the check pattern here
 3. `tests/isa/traps.asm`: a trap handler that logs every trap, and a trip into User mode
 4. `tests/isa/paging.asm`: building page tables in assembly, then faulting on purpose
-5. `tests/isa/mutation_test.cpp`: how the suite tests *itself*
-6. `tests/cli/CMakeLists.txt` and `cmake/ExpectExit.cmake`: the CLI's exit codes as a contract
+5. `tests/isa/illegal.asm`: strict decoding, tested by writing instructions at run time
+6. `tests/isa/mutation_test.cpp`: how the suite tests *itself*
+7. `tests/cli/CMakeLists.txt` and `cmake/ExpectExit.cmake`: the CLI's exit codes as a contract
 
 Try it: `ctest --preset debug -R "conformance|roundtrip|cli"`
 
@@ -472,7 +473,7 @@ Try it: `ctest --preset debug -R "conformance|roundtrip|cli"`
 The unit tests call C++ functions of *this* interpreter. M2–M4 build three new CPUs with different
 insides, and C++ unit tests of the interpreter say nothing about them. A program in assembly is the
 one thing every CPU accepts. So the specification is written down a second time, as executable
-checks, in the only language all the CPUs share. The same nine files will run on the single-cycle,
+checks, in the only language all the CPUs share. The same ten files will run on the single-cycle,
 multi-cycle and pipelined CPUs unchanged.
 
 ### 2. The check pattern
@@ -495,7 +496,7 @@ the interpreter agrees with itself.
 
 ### 3. Testing traps: a logging handler
 
-To check a trap you have to survive it. `traps.asm` and `paging.asm` install a handler that:
+To check a trap you have to survive it. `traps.asm`, `paging.asm` and `illegal.asm` install a handler that:
 1. Writes CAUSE, EPC, BADVADDR and STATUS (at entry) to a log in memory.
 2. Returns past the faulting instruction (EPC + 4).
 3. Handles two special cases:
@@ -506,14 +507,50 @@ To check a trap you have to survive it. `traps.asm` and `paging.asm` install a h
 The checks then compare log entries with what the spec says. User mode is entered the way a real OS
 does it: clear `PIE` and `PKM`, put the user PC in `EPC`, and `ERET`.
 
-### 4. Who tests the tests? Mutation testing
+**A subtle trap in testing traps.** "The last logged CAUSE is 12" proves nothing if the trap *before*
+also logged 12: had the instruction under test wrongly succeeded, the old entry would still be there.
+So every check that expects a trap also compares the logged **EPC**, which names the one instruction
+that trapped. Two early checks (a `SWAP` fault right after a `SW` fault) had exactly this weakness.
 
-A check can be useless in two ways: it never runs (a jump skips it), or it can never fail (it compares
-a register with itself). Both look like "pass". `mutation_test.cpp` finds them: for every line
-`Bxx …, fail` it builds a copy of the program with that one condition inverted (`BNE` ↔ `BEQ`) and
-requires the copy to **fail**. If inverting a check changes nothing, the check was doing nothing.
-The sweep found nothing to fix, but it was proven to work by planting a dead check: the sweep
-reported it at once.
+### 4. Who tests the tests? Three questions
+
+A check can be wrong in three different ways, and each needs a different tool.
+
+| A check that… | looks like | is found by |
+|---|---|---|
+| **never runs** (a jump skips it) | pass | **Mutation 1, invert:** `BNE` → `BEQ`. The branch is now taken, so the program must fail. If it still passes, the check never executed. |
+| **can never fail** (`BNE t0, t0, fail`) | pass | **Mutation 2, corrupt:** insert `XORI t0, t0, 1` just before it. A real comparison now fails. A tautology still passes. |
+| **expects the wrong value** | pass | **No mutation can.** If the interpreter and the test share a misreading of the spec, they agree. |
+
+Why both mutations? Inverting a tautology `BNE t0, t0` gives `BEQ t0, t0`, which always jumps to
+`fail`, so the mutant dies and the useless check looks fine. Inversion only proves a check *runs*.
+Corruption proves it *depends on the result*. `mutation_test.cpp` applies both to every check in every
+program. It was itself tested by planting a dead check and a tautology: both were
+reported at once.
+
+**That planting found a bug in the mutation test itself.** The first version "killed" the planted
+tautology, which looked right and was wrong. The corrupted mutants were built from a `std::smatch`
+whose text had already been overwritten (a dangling reference). None of them even assembled, and "does
+not build" counted as "failed", so operator 2 had passed every check vacuously. Two fixes:
+- copy the match groups to strings before mutating;
+- a mutant now has to **build and then fail**. "Does not build" is reported as an error, never
+  counted as a kill.
+
+With operator 2 really working, it found one genuine weak check: `BNE s1, s1, fail` in
+`branch.asm`. A CPU that compared register *numbers* instead of values would pass it. It now
+compares two different registers that hold the same value.
+
+The lesson: a check that has never been seen to fail is not yet a check, and that includes the
+checks on the checks.
+
+The third row is the **oracle problem**: who checks the expected values? Two defences:
+1. Every value is worked out from the spec by hand (the comments show the arithmetic), never copied
+   from the interpreter.
+2. An **independent re-derivation**: a reviewer saw only the spec and the test programs, never the
+   implementation, and recomputed all 92 checks. Result: **0 disagreements**, 4 places where the spec
+   was ambiguous (now settled in the spec text), and a list of rules no check touched yet (now added;
+   see `tests/isa/README.md`). An ambiguity is worth as much as a bug: the M3 and M4 CPUs would have
+   had to guess.
 
 ### 5. Gaps found by asking "what isn't covered?"
 
@@ -528,6 +565,13 @@ they were added:
 - **The CLI's exit codes** (0, 1, 2, 3): a script relies on them, so `tests/cli/` checks each one,
   together with its message. This found a real inconsistency: `asteria` with no command exited 0.
   Now it exits 2, like any other usage error.
+- **Strict decoding as a program** (`illegal.asm`): the unit tests check the decoder, but a CPU in M3
+  has its own decoder. `illegal.asm` stores each of 53 illegal words into a slot, runs `FENCE.I`, and
+  calls it. Every one must trap as `IllegalInstruction` at that slot. Check 1 first runs a *legal*
+  stored word, which proves the slot really executes what was stored. Without it, every "must trap"
+  check could pass vacuously.
+- **One list of programs.** The mutation test reads the program list from the same CMake variable
+  that creates the CTest entries, so no program can join the suite without being mutation-tested.
 
 What is still not covered, and why (interrupts, selective `TLBFLUSH`), is listed in
 `tests/isa/README.md`. Saying what is *not* tested is part of a test suite.
@@ -550,10 +594,13 @@ What is still not covered, and why (interrupts, selective `TLBFLUSH`), is listed
 3. In `traps.asm`, why does a failed fetch return to `ra` instead of `EPC + 4`?
 4. How does the kernel enter User mode for the first time? Which STATUS bits does it set up, and
    why does it use `ERET` rather than a jump?
-5. What is a mutant, and what does a surviving mutant tell you?
+5. What is a mutant? Why does inverting `BNE t0, t0, fail` *not* reveal that the check is useless,
+   and which mutation does?
 6. `LW t0, 2(t3)` with `t3` pointing to an unmapped page: which exception, and why that one?
 7. Why does the `FENCE.I` check pass trivially today, and when will it start to matter?
 8. Why does a CLI's exit code deserve tests of its own?
+9. What is the oracle problem, and why can no mutation solve it?
+10. Why does every trap check compare EPC and not just CAUSE?
 
 ---
 

@@ -77,6 +77,11 @@ here:   AUIPC   t0, 1
 there:  AUIPC   t0, 0
         LA      t2, there
         BNE     t0, t2, fail
+back:   AUIPC   t0, 0xFFFF              ; imm 0xFFFF: PC + 0xFFFF0000 = PC - 0x10000
+        LA      t2, back
+        LI      t3, -0x10000
+        ADD     t2, t2, t3
+        BNE     t0, t2, fail
 
         LI      a0, 10                  ; LUI + ORI builds any constant; %hi_adj pairs with ADDI
         .equ    X, 0x9ABC8765

@@ -3,7 +3,7 @@
 **Current status:** M1 is complete. All four parts are done: (1) the instruction table,
 encoder/decoder and disassembler; (2) the reference interpreter with traps, interrupts, privilege and
 paging; (3) assembler v1, the AXF `.ast` format, the machine and the `asteria build | run | disasm`
-CLI; (4) the ISA conformance suite (`tests/isa/`, nine self-checking programs, mutation-tested) and
+CLI; (4) the ISA conformance suite (`tests/isa/`, ten self-checking programs, mutation-tested and independently re-derived) and
 the round-trip and CLI tests. M2 starts only on an explicit go.
 
 **Strategy: build a thin vertical slice first, then deepen it.** After M2 there is always a working,

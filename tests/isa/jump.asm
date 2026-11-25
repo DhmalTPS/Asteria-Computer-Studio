@@ -52,6 +52,16 @@ j5:     JALR    t0, t0, 0
         J       fail
 .L7:    BNE     sp, t0, fail
 
+        LI      a0, 8                   ; JAL backward: a negative offset
+        J       .L8b
+.L8a:   LA      t1, j8
+        ADDI    t1, t1, 4
+        BNE     t0, t1, fail
+        J       .L8c
+.L8b:
+j8:     JAL     t0, .L8a
+        J       fail
+.L8c:
         LI      a0, 0
 fail:   HALT
 

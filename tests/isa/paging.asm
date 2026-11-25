@@ -8,8 +8,13 @@
 ;   l2[1] nothing (V = 0)        l2[5] user_page (the code below), R X U
 ;   l2[2] frame_b, R only        l2[6] udata, R W U
 ;   l2[3] frame_b, W only        l2[7] frame_b, R W
+;   l2[8] frame_c, R W, A preset l2[9] kpage (kernel code), X only
 ; root[2] is a superpage whose PPN is not 4 MiB-aligned; root[3] is empty; root[4] points to
-; a second-level table in unpopulated memory.
+; a second-level table in unpopulated memory; root[5] maps VA 0x01400000 onto PA 0x80000000, a
+; superpage that is NOT the identity, so VPN0 and the offset must pass through.
+;
+; Every PTE is written before paging is turned on, so no stale translation can exist (spec 8.6),
+; except in check 12, which tests exactly that rule.
 ;
 ; The handler logs each trap (CAUSE, EPC, BADVADDR, STATUS) and returns past the trapping
 ; instruction; a failed fetch returns to ra; ECALL from User mode returns to the kernel at s5.
@@ -65,6 +70,14 @@ main:
         SW      t0, 24(s1)              ; l2[6]
         ORI     t0, s3, R + W + V
         SW      t0, 28(s1)              ; l2[7]
+        LA      t0, frame_c
+        ORI     t0, t0, A + W + R + V
+        SW      t0, 32(s1)              ; l2[8]: A already set, D not
+        LA      t0, kpage
+        ORI     t0, t0, X + V
+        SW      t0, 36(s1)              ; l2[9]: execute-only, kernel
+        LI      t0, 0x80000000 + W + R + V
+        SW      t0, 20(s0)              ; root[5]: superpage, A = D = 0
 
         ORI     t0, s0, 1               ; PTBR: root PPN, EN = 1
         CSRW    PTBR, t0                ; paging is on from the next fetch
@@ -99,13 +112,21 @@ t3_at:  LW      t2, 0x1000(s5)
         BNE     t2, t1, fail
 
         LI      a0, 4                   ; a store to a read-only page: subcode 1
+        LI      t1, 0x600D
+        SW      t1, 0(s3)               ; frame_b[0], through the identity map
         SW      t0, 0x2000(s5)
         LW      t0, -16(s4)
         LI      t1, STORE_PF + SUB_PERMISSION
         BNE     t0, t1, fail
         ADDI    t3, s5, 0x2000          ; SWAP counts as a store: it needs R and W
-        SWAP    t2, t2, (t3)
+t4_swap: SWAP   t2, t2, (t3)
         LW      t0, -16(s4)
+        BNE     t0, t1, fail
+        LW      t0, -12(s4)             ; it really trapped (the code alone could be the SW's)
+        LA      t1, t4_swap
+        BNE     t0, t1, fail
+        LW      t0, 0(s3)               ; neither fault wrote memory
+        LI      t1, 0x600D
         BNE     t0, t1, fail
         LW      t0, 8(s1)               ; faulting accesses set neither A nor D
         ORI     t1, s3, R + V
@@ -199,6 +220,61 @@ t3_at:  LW      t2, 0x1000(s5)
         LI      t0, 0xBEEF
         BNE     t1, t0, fail
 
+        LI      a0, 16                  ; A already set: a store sets D, and only D
+        LI      t3, 0x00408000
+        SW      t3, 0(t3)
+        LW      t0, 32(s1)
+        LA      t1, frame_c
+        ORI     t1, t1, D + A + W + R + V
+        BNE     t0, t1, fail
+
+        LI      a0, 17                  ; execute-only: X does not imply R; a fetch sets A
+        LI      t3, 0x00409000
+t17_load: LW    t0, 0(t3)
+        LW      t0, -16(s4)
+        LI      t1, LOAD_PF + SUB_PERMISSION
+        BNE     t0, t1, fail
+        LW      t0, -12(s4)
+        LA      t1, t17_load
+        BNE     t0, t1, fail
+        LW      t0, 36(s1)              ; the faulting load set no A
+        LA      t2, kpage
+        ORI     t1, t2, X + V
+        BNE     t0, t1, fail
+        MOV     v0, s4
+        JALR    ra, t3, 0               ; kpage is just RET
+        BNE     s4, v0, fail            ; the fetch did not trap
+        LW      t0, 36(s1)
+        ORI     t1, t2, A + X + V
+        BNE     t0, t1, fail
+
+        LI      a0, 18                  ; a superpage that is not the identity; A, D at level 1
+        LA      t2, frame_c
+        LI      t0, 0x5AFE
+        SW      t0, 4(t2)               ; through the identity map
+        LI      t0, 0x81400000          ; VA = PA - 0x80000000 + 0x01400000
+        ADD     t3, t2, t0
+        LW      t1, 4(t3)
+        LI      t0, 0x5AFE
+        BNE     t1, t0, fail
+        LW      t0, 20(s0)              ; the load set A in the root entry
+        LI      t1, 0x80000000 + A + W + R + V
+        BNE     t0, t1, fail
+        LI      t0, 0x1357
+        SW      t0, 8(t3)               ; and a store sets D
+        LW      t1, 8(t2)
+        BNE     t1, t0, fail
+        LW      t0, 20(s0)
+        LI      t1, 0x80000000 + D + A + W + R + V
+        BNE     t0, t1, fail
+
+        LI      a0, 19                  ; Kernel mode may access a U page (spec 6)
+        LI      t3, 0x00406000
+        MOV     v0, s4
+        LW      t0, 0(t3)
+        SW      t0, 4(t3)
+        BNE     s4, v0, fail
+
         LI      a0, 13                  ; User mode: U pages only
         LA      t0, udata
         LI      t1, 0x5A5A
@@ -217,8 +293,8 @@ back_in_kernel:
         BNE     t1, t0, fail
         LI      t0, 0x77                ; the faulting user load did not write t2
         BNE     t2, t0, fail
-        SUB     t0, s4, s6              ; two traps: the fault and the ECALL
-        LI      t1, 32
+        SUB     t0, s4, s6              ; four traps: load, store and fetch faults, then the ECALL
+        LI      t1, 64
         BNE     t0, t1, fail
         LW      t0, 0(s6)
         LI      t1, LOAD_PF + SUB_PERMISSION
@@ -232,7 +308,21 @@ back_in_kernel:
         BNE     t0, t1, fail
         LW      t0, 8(s6)
         BNE     t0, s5, fail            ; 0x00400000
-        LW      t0, 16(s6)
+        LW      t0, 16(s6)              ; a store to a U page without W
+        LI      t1, STORE_PF + SUB_PERMISSION
+        BNE     t0, t1, fail
+        LW      t0, 24(s6)
+        LI      t1, 0x00405000
+        BNE     t0, t1, fail
+        LW      t0, 32(s6)              ; a fetch from a page with X but U = 0
+        LI      t1, 1 + SUB_PERMISSION
+        BNE     t0, t1, fail
+        LW      t0, 36(s6)              ; EPC = BADVADDR = the target
+        LI      t1, 0x00409000
+        BNE     t0, t1, fail
+        LW      t0, 40(s6)
+        BNE     t0, t1, fail
+        LW      t0, 48(s6)
         LI      t1, 6
         BNE     t0, t1, fail
 
@@ -276,8 +366,16 @@ user_page:
         LW      t1, 0(t0)
         LI      t0, 0x00400000          ; l2[0]: U = 0
 u_fault:
-        LW      t2, 0(t0)               ; LoadPageFault, permission
+        LW      t2, 0(t0)               ; LoadPageFault, permission (U = 0)
+        LI      t0, 0x00405000
+        SW      t1, 0(t0)               ; StorePageFault, permission (this page has no W)
+        LI      t0, 0x00409000
+        JALR    ra, t0, 0               ; InstrPageFault, permission (X, but U = 0)
         ECALL
+
+; ---- one page of kernel code, mapped execute-only at VA 0x00409000 --------------------------
+        .align  12
+kpage:  RET
 
         .bss
 root:   .space  4096
@@ -287,6 +385,8 @@ frame_a:
 frame_b:
         .space  4096
 udata:  .space  4096
+frame_c:
+        .space  4096
 log:    .space  512
 user_log:
         .space  256

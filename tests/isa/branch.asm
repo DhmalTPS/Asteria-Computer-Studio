@@ -10,14 +10,16 @@ main:
         LI      s1, 1
         LI      s2, -1                  ; 0xFFFFFFFF: signed -1, unsigned huge
         LI      s3, 0x80000000          ; signed min, unsigned 2^31
+        LI      s4, 1                   ; equal to s1, but a different register: a branch
+                                        ; must compare VALUES, not register numbers
 
         LI      a0, 1                   ; BEQ
         BEQ     s1, s2, fail
-        BEQ     s1, s1, .L1
+        BEQ     s1, s4, .L1
         J       fail
 .L1:
         LI      a0, 2                   ; BNE
-        BNE     s1, s1, fail
+        BNE     s1, s4, fail
         BNE     s1, s2, .L2
         J       fail
 .L2:
